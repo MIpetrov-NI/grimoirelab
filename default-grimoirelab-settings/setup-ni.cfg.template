@@ -54,7 +54,7 @@ kibiter_version =
 collection = true
 identities = true
 enrichment = true
-panels = false
+panels = true
 
 [git]
 raw_index = git_ni_raw
