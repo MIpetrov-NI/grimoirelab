@@ -205,9 +205,9 @@ def import_dashboard(args, dashboard):
 def main():
     args = parse_args()
     try:
-        connect_aliases(args)
         for dashboard in args.dashboards:
             import_dashboard(args, dashboard)
+        connect_aliases(args)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         sys.exit(f"error: {exc}")
 

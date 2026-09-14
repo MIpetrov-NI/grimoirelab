@@ -366,7 +366,7 @@ def main():
             client.add_organization(args.organization)
             print(f"Created SortingHat organization: {args.organization}")
 
-        failures = []
+        applied = 0
         for individual, matching_usernames in proposed:
             try:
                 client.enroll(
@@ -376,18 +376,16 @@ def main():
                     args.to_date,
                 )
             except SyncError as exc:
-                failures.append((matching_usernames, str(exc)))
+                identity = individual["mk"]
+                if args.show_logins:
+                    identity = ",".join(sorted(matching_usernames))
+                raise SyncError(
+                    f"enrollment failed after {applied} successful updates "
+                    f"for {identity}: {exc}"
+                ) from exc
+            applied += 1
 
-        applied = len(proposed) - len(failures)
         print(f"Applied {applied} {args.organization} enrollments.")
-        if failures:
-            if args.show_logins:
-                for usernames, error in failures:
-                    print(
-                        f"Failed enrollment for {','.join(sorted(usernames))}: {error}",
-                        file=sys.stderr,
-                    )
-            raise SyncError(f"{len(failures)} enrollments failed")
     except (KeyError, TypeError, SyncError) as exc:
         sys.exit(f"error: {exc}")
 
