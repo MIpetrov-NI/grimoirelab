@@ -67,6 +67,13 @@ docker compose up -d
 Services: `mariadb`, `valkey`, `opensearch` (9200), `opensearch-dashboards` (5601),
 `sortinghat`, `nginx` (8000), and `mordred` (the orchestrator).
 
+Every service uses Docker's `unless-stopped` restart policy. After a reboot, the
+stack starts again when Docker Desktop starts, unless it was explicitly stopped
+before the reboot. Enable **Start Docker Desktop when you sign in to your
+computer** in Docker Desktop settings so collection resumes without a manual
+`docker compose up -d`. An interrupted backend operation may restart, but
+persisted OpenSearch and SortingHat data is retained.
+
 ### 4. Watch the pipeline
 
 ```bash
@@ -191,6 +198,10 @@ do not equate `Unknown` with external.
   incremental runs; that is a later phase.
 - **Reset.** `docker compose down -v` drops volumes (OpenSearch + MariaDB data) for a
   clean re-run.
+- **Restart after reboot.** Docker restarts the stack when Docker Desktop starts.
+  If Docker Desktop does not start automatically, open it and run
+  `docker compose up -d`. Use `docker compose stop` before shutting down when you
+  intentionally do not want the stack to restart.
 
 ## Teardown
 
