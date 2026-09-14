@@ -1,4 +1,4 @@
-# NI OSS Health Dashboard - SirMordred config (Phase 0, Tier-1 subset).
+# NI OSS Health Dashboard - SirMordred config (Tier-1 subset).
 #
 # This is a TEMPLATE. Do not put a real token here and do not run from it directly.
 # Generate the runtime config (git-ignored) with:
@@ -18,7 +18,7 @@ debug = false
 logs_dir = /home/grimoire/logs
 bulk_size = 100
 scroll_size = 100
-aliases_file = /home/grimoire/aliases.json
+aliases_file = /home/grimoire/conf/aliases.json
 
 [projects]
 projects_file = /home/grimoire/conf/projects.json
@@ -45,16 +45,17 @@ unaffiliated_group = Unknown
 affiliate = true
 
 [panels]
-kibiter_time_from =
-kibiter_default_index =
-kibiter_url =
+kibiter_time_from = now-5y
+kibiter_default_index = git
+kibiter_url = http://opensearch-dashboards:5601
 kibiter_version =
 
 [phases]
 collection = true
 identities = true
 enrichment = true
-panels = true
+# OpenSearch Dashboards 3 uses NDJSON imports; Mordred's panels task targets legacy Kibiter.
+panels = false
 
 [git]
 raw_index = git_ni_raw
