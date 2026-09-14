@@ -1,4 +1,4 @@
-# NI OSS Health Dashboard - Phase 0 Run Guide
+# NI OSS Health Dashboard - Local Run Guide
 
 Stand up the GrimoireLab pipeline locally against a **Tier-1 subset** of the NI org
 (top 10 public repos by stars). Goal: prove collection -> enrichment -> OpenSearch
@@ -21,8 +21,11 @@ This runs inside the GrimoireLab **fork** (the tool). The companion context repo
 | `default-grimoirelab-settings/projects.json` | yes | Repo list GrimoireLab collects (generated). |
 | `default-grimoirelab-settings/setup-ni.cfg.template` | yes | SirMordred config with a `__GITHUB_TOKEN__` placeholder. |
 | `default-grimoirelab-settings/setup-ni.cfg` | **no (git-ignored)** | Runtime config with the real token. Mounted into mordred. |
+| `default-grimoirelab-settings/aliases-ni.json` | yes | Maps NI physical indices to the stable names used by Sigils. |
 | `scripts/gen_projects.py` | yes | Regenerates `projects.json` from the live org. |
 | `scripts/render_setup.py` | yes | Injects the token into the runtime config. |
+| `scripts/import_sigils.py` | yes | Creates dashboard aliases and imports OpenSearch Sigils saved objects. |
+| `scripts/sync_ni_affiliations.py` | yes | Previews or enrolls contributing NI GitHub members in SortingHat. |
 
 ## Steps
 
@@ -86,15 +89,100 @@ You should see (row counts grow as enrichment runs):
 - `github_ni_raw`, `github_ni_enriched`
 - `git-aoc_ni_enriched`, `git-onion_ni_enriched` (study outputs)
 
-### 6. Explore
+### 6. Import the Sigils dashboards
 
-Open OpenSearch Dashboards at http://localhost:5601 and create index patterns for
-`git_ni_enriched` and `github_ni_enriched`. Panels are Phase 1; Phase 0 only proves
-the data pipeline.
+Run this from the fork root after `git_ni_enriched` and `github_ni_enriched` exist:
+
+```bash
+python scripts/import_sigils.py --insecure
+```
+
+The script:
+
+1. Connects the `git` alias to `git_ni_enriched`.
+2. Connects the `github_issues` alias to `github_ni_enriched`.
+3. Connects `git_areas_of_code` when `git-aoc_ni_enriched` exists.
+4. Downloads the OpenSearch-compatible `overview`, `git`, `github_issues`, and
+   `github_pull_requests` NDJSON bundles from Sigils.
+5. Imports the saved objects with overwrite enabled, so rerunning is safe.
+
+To pin or test another Sigils revision, pass `--sigils-ref <tag-or-commit>`.
+Credentials can be overridden with `OPENSEARCH_USERNAME` and
+`OPENSEARCH_PASSWORD`.
+
+### 7. Verify the dashboard connections
+
+Confirm the canonical aliases resolve to NI indices:
+
+```bash
+curl -sk -u admin:GrimoireLab.1 \
+  'https://localhost:9200/_cat/aliases/git,github_issues,git_areas_of_code?v'
+```
+
+Confirm the imported data views have the IDs expected by the visualizations:
+
+```bash
+curl -s -u admin:GrimoireLab.1 -H 'osd-xsrf: true' \
+  'http://localhost:5601/api/saved_objects/_find?type=index-pattern&per_page=100'
+```
+
+Open http://localhost:5601, go to **Dashboards**, and open:
+
+- Git
+- GitHub Issues
+- GitHub Pull Requests
+- Overview
+
+Set a broad time range such as **Last 5 years** if the panels initially show no data.
+The imported data views use `grimoire_creation_date` as their time field.
+
+### 8. Classify NI-affiliated contributors
+
+GitHub organization membership is the authoritative source for whether a contributor
+is a current member of the NI GitHub organization. The sync reads the authenticated
+membership list into memory, intersects it with GitHub identities already collected
+by SortingHat, and proposes `NI` enrollments. It does not write or commit the member
+roster.
+
+The token needs `read:org`. Preview first:
+
+```bash
+GITHUB_TOKEN=$(gh auth token) python scripts/sync_ni_affiliations.py
+```
+
+The command aborts if fewer than 1,000 members are visible, which prevents a token
+that can see only public memberships from silently producing an incomplete result.
+No SortingHat data changes without `--apply`.
+
+GitHub does not expose organization membership start dates. The initial NI policy
+explicitly treats current NI membership as a proxy for historical NI affiliation so
+the existing contribution history can be classified. Apply the reviewed snapshot:
+
+```bash
+GITHUB_TOKEN=$(gh auth token) \
+  python scripts/sync_ni_affiliations.py --apply --from-date 1900-01-01
+```
+
+This is a cohort approximation, not verified employment history. Dashboards and
+reports must describe it as current NI GitHub membership projected historically.
+
+The sync is additive: it does not withdraw departed members or overwrite contributors
+who already have another SortingHat enrollment. Those cases require review because a
+missing GitHub membership does not provide a reliable departure date.
+
+After applying enrollments, allow Mordred's identity autorefresh to propagate
+affiliations into enriched documents. Keep unmatched contributors as `Unknown`;
+do not equate `Unknown` with external.
 
 ## Notes / gotchas
 
-- **`panels = false`** in the config on purpose. Sigils panel import is Phase 1.
+- **`panels = false` is intentional.** Mordred's panel phase targets legacy Kibiter
+  JSON and APIs. OpenSearch Dashboards 3 uses the NDJSON import script above.
+- **Do not point Sigils at `*_ni_enriched` directly.** The stable aliases (`git`,
+  `github_issues`, and `git_areas_of_code`) decouple saved objects from physical
+  NI index names.
+- **Missing area-of-code panels.** If `git-aoc_ni_enriched` does not exist yet, the
+  import script skips its optional alias. Rerun the script after that study completes.
 - **Identity resolution is provisional.** SortingHat merges identities, but org
   affiliation and bus-factor/diversity metrics are only trustworthy after the Phase 2
   identity pass (see `docs/metrics.md`, principle P4 in the companion repo).

@@ -59,6 +59,7 @@ services:
       volumes:
         - ../default-grimoirelab-settings/setup-ni.cfg:/home/grimoire/conf/setup.cfg
         - ../default-grimoirelab-settings/projects.json:/home/grimoire/conf/projects.json
+        - ../default-grimoirelab-settings/aliases-ni.json:/home/grimoire/conf/aliases.json:ro
         - /tmp/:/home/grimoire/logs
       depends_on:
         nginx:
