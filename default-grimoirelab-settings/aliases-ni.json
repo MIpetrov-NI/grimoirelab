@@ -7,7 +7,32 @@
     ],
     "enrich": [
       {
-        "alias": "git"
+        "alias": "git",
+        "filter": {
+          "bool": {
+            "should": [
+              {
+                "bool": {
+                  "must_not": [
+                    {
+                      "term": {
+                        "origin": "https://github.com/ni/linux.git"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "range": {
+                  "grimoire_creation_date": {
+                    "gte": "2014-06-20T14:25:04Z"
+                  }
+                }
+              }
+            ],
+            "minimum_should_match": 1
+          }
+        }
       },
       {
         "alias": "affiliations"

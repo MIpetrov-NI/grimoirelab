@@ -115,6 +115,13 @@ The script:
 6. Sets `git` as the default data view and `now-5y` to `now` as the default
    dashboard time range.
 
+The canonical `git` alias applies repository-specific analysis boundaries from
+`aliases-ni.json`. For `ni/linux`, commits before the repository was created in
+the NI organization (`2014-06-20T14:25:04Z`) remain in the physical indices for
+provenance but are excluded from dashboards. Add a reviewed alias-filter clause
+for any other repository with inherited upstream history; do not rely on the
+interactive dashboard time picker to establish portfolio scope.
+
 To pin or test another Sigils revision, pass `--sigils-ref <tag-or-commit>`.
 Credentials can be overridden with `OPENSEARCH_USERNAME` and
 `OPENSEARCH_PASSWORD`. Override the dashboard defaults with `--default-index`,

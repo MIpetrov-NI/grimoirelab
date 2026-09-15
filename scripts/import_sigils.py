@@ -13,6 +13,11 @@ import urllib.request
 import uuid
 
 
+DEFAULT_ALIASES_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "default-grimoirelab-settings",
+    "aliases-ni.json",
+)
 DEFAULT_DASHBOARDS = (
     "overview",
     "git",
@@ -49,6 +54,11 @@ def parse_args():
         "--dashboards-url",
         default="http://localhost:5601",
         help="OpenSearch Dashboards base URL (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--aliases-file",
+        default=DEFAULT_ALIASES_FILE,
+        help="Mordred alias configuration with analysis filters (default: %(default)s)",
     )
     parser.add_argument("--username", default=os.environ.get("OPENSEARCH_USERNAME", "admin"))
     parser.add_argument(
@@ -131,15 +141,32 @@ def alias_indices(args, alias):
         raise
 
 
+def alias_filters(path):
+    with open(path, encoding="utf-8") as aliases_file:
+        configuration = json.load(aliases_file)
+
+    filters = {}
+    for backend in configuration.values():
+        for alias_type in ("raw", "enrich"):
+            for entry in backend.get(alias_type, []):
+                if "filter" in entry:
+                    filters[entry["alias"]] = entry["filter"]
+    return filters
+
+
 def connect_aliases(args):
     actions = []
+    filters = alias_filters(args.aliases_file)
     for index, alias, required in ALIASES:
         if index_exists(args, index):
             for existing_index in alias_indices(args, alias) - {index}:
                 actions.append(
                     {"remove": {"index": existing_index, "alias": alias}}
                 )
-            actions.append({"add": {"index": index, "alias": alias}})
+            add_action = {"index": index, "alias": alias}
+            if alias in filters:
+                add_action["filter"] = filters[alias]
+            actions.append({"add": add_action})
         elif required:
             raise RuntimeError(f"required index does not exist: {index}")
         else:
@@ -169,7 +196,11 @@ def connect_aliases(args):
             )
         else:
             add = action["add"]
-            print(f"[sigils] connected {add['alias']} -> {add['index']}")
+            filter_status = " with analysis filter" if "filter" in add else ""
+            print(
+                f"[sigils] connected {add['alias']} -> {add['index']}"
+                f"{filter_status}"
+            )
 
 
 def download_dashboard(dashboard, ref):
