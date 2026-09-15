@@ -112,10 +112,13 @@ The script:
 4. Downloads the OpenSearch-compatible `overview`, `git`, `github_issues`, and
    `github_pull_requests` NDJSON bundles from Sigils.
 5. Imports the saved objects with overwrite enabled, so rerunning is safe.
+6. Sets `git` as the default data view and `now-5y` to `now` as the default
+   dashboard time range.
 
 To pin or test another Sigils revision, pass `--sigils-ref <tag-or-commit>`.
 Credentials can be overridden with `OPENSEARCH_USERNAME` and
-`OPENSEARCH_PASSWORD`.
+`OPENSEARCH_PASSWORD`. Override the dashboard defaults with `--default-index`,
+`--time-from`, and `--time-to`.
 
 ### 7. Verify the dashboard connections
 
@@ -140,8 +143,10 @@ Open http://localhost:5601, go to **Dashboards**, and open:
 - GitHub Pull Requests
 - Overview
 
-Set a broad time range such as **Last 5 years** if the panels initially show no data.
-The imported data views use `grimoire_creation_date` as their time field.
+The importer sets **Last 5 years** as the default. If an already-open browser tab
+retains a shorter range in its URL, select **Last 5 years** once or reopen the
+dashboard from the Dashboards list. The imported data views use
+`grimoire_creation_date` as their time field.
 
 ### 8. Classify NI-affiliated contributors
 

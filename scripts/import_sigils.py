@@ -62,6 +62,21 @@ def parse_args():
         help="Sigils Git ref to download (default: %(default)s)",
     )
     parser.add_argument(
+        "--default-index",
+        default="git",
+        help="Default OpenSearch Dashboards data-view ID (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--time-from",
+        default="now-5y",
+        help="Default dashboard time-range start (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--time-to",
+        default="now",
+        help="Default dashboard time-range end (default: %(default)s)",
+    )
+    parser.add_argument(
         "--insecure",
         action="store_true",
         help="Disable TLS certificate verification for local self-signed certificates",
@@ -202,12 +217,52 @@ def import_dashboard(args, dashboard):
     )
 
 
+def configure_dashboard_defaults(args):
+    time_defaults = json.dumps(
+        {"from": args.time_from, "to": args.time_to},
+        separators=(",", ":"),
+    )
+    payload = json.dumps(
+        {
+            "changes": {
+                "defaultIndex": args.default_index,
+                "timepicker:timeDefaults": time_defaults,
+            }
+        }
+    ).encode()
+    url = f"{args.dashboards_url.rstrip('/')}/api/opensearch-dashboards/settings"
+    with request(
+        url,
+        args.username,
+        args.password,
+        data=payload,
+        headers={"Content-Type": "application/json", "osd-xsrf": "true"},
+        method="POST",
+        insecure=args.insecure,
+    ) as response:
+        result = json.load(response)
+
+    settings = result.get("settings", {})
+    if settings.get("defaultIndex", {}).get("userValue") != args.default_index:
+        raise RuntimeError("OpenSearch Dashboards did not save the default data view")
+    if (
+        settings.get("timepicker:timeDefaults", {}).get("userValue")
+        != time_defaults
+    ):
+        raise RuntimeError("OpenSearch Dashboards did not save the default time range")
+    print(
+        f"[sigils] configured default data view {args.default_index} "
+        f"and time range {args.time_from} to {args.time_to}"
+    )
+
+
 def main():
     args = parse_args()
     try:
         connect_aliases(args)
         for dashboard in args.dashboards:
             import_dashboard(args, dashboard)
+        configure_dashboard_defaults(args)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         sys.exit(f"error: {exc}")
 
