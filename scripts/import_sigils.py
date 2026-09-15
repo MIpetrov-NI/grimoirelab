@@ -13,6 +13,11 @@ import urllib.request
 import uuid
 
 
+DEFAULT_ALIASES_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "default-grimoirelab-settings",
+    "aliases-ni.json",
+)
 DEFAULT_DASHBOARDS = (
     "overview",
     "git",
@@ -50,6 +55,11 @@ def parse_args():
         default="http://localhost:5601",
         help="OpenSearch Dashboards base URL (default: %(default)s)",
     )
+    parser.add_argument(
+        "--aliases-file",
+        default=DEFAULT_ALIASES_FILE,
+        help="Mordred alias configuration with analysis filters (default: %(default)s)",
+    )
     parser.add_argument("--username", default=os.environ.get("OPENSEARCH_USERNAME", "admin"))
     parser.add_argument(
         "--password",
@@ -60,6 +70,21 @@ def parse_args():
         "--sigils-ref",
         default="main",
         help="Sigils Git ref to download (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--default-index",
+        default="git",
+        help="Default OpenSearch Dashboards data-view ID (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--time-from",
+        default="now-5y",
+        help="Default dashboard time-range start (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--time-to",
+        default="now",
+        help="Default dashboard time-range end (default: %(default)s)",
     )
     parser.add_argument(
         "--insecure",
@@ -116,15 +141,32 @@ def alias_indices(args, alias):
         raise
 
 
+def alias_filters(path):
+    with open(path, encoding="utf-8") as aliases_file:
+        configuration = json.load(aliases_file)
+
+    filters = {}
+    for backend in configuration.values():
+        for alias_type in ("raw", "enrich"):
+            for entry in backend.get(alias_type, []):
+                if "filter" in entry:
+                    filters[entry["alias"]] = entry["filter"]
+    return filters
+
+
 def connect_aliases(args):
     actions = []
+    filters = alias_filters(args.aliases_file)
     for index, alias, required in ALIASES:
         if index_exists(args, index):
             for existing_index in alias_indices(args, alias) - {index}:
                 actions.append(
                     {"remove": {"index": existing_index, "alias": alias}}
                 )
-            actions.append({"add": {"index": index, "alias": alias}})
+            add_action = {"index": index, "alias": alias}
+            if alias in filters:
+                add_action["filter"] = filters[alias]
+            actions.append({"add": add_action})
         elif required:
             raise RuntimeError(f"required index does not exist: {index}")
         else:
@@ -154,7 +196,11 @@ def connect_aliases(args):
             )
         else:
             add = action["add"]
-            print(f"[sigils] connected {add['alias']} -> {add['index']}")
+            filter_status = " with analysis filter" if "filter" in add else ""
+            print(
+                f"[sigils] connected {add['alias']} -> {add['index']}"
+                f"{filter_status}"
+            )
 
 
 def download_dashboard(dashboard, ref):
@@ -202,12 +248,52 @@ def import_dashboard(args, dashboard):
     )
 
 
+def configure_dashboard_defaults(args):
+    time_defaults = json.dumps(
+        {"from": args.time_from, "to": args.time_to},
+        separators=(",", ":"),
+    )
+    payload = json.dumps(
+        {
+            "changes": {
+                "defaultIndex": args.default_index,
+                "timepicker:timeDefaults": time_defaults,
+            }
+        }
+    ).encode()
+    url = f"{args.dashboards_url.rstrip('/')}/api/opensearch-dashboards/settings"
+    with request(
+        url,
+        args.username,
+        args.password,
+        data=payload,
+        headers={"Content-Type": "application/json", "osd-xsrf": "true"},
+        method="POST",
+        insecure=args.insecure,
+    ) as response:
+        result = json.load(response)
+
+    settings = result.get("settings", {})
+    if settings.get("defaultIndex", {}).get("userValue") != args.default_index:
+        raise RuntimeError("OpenSearch Dashboards did not save the default data view")
+    if (
+        settings.get("timepicker:timeDefaults", {}).get("userValue")
+        != time_defaults
+    ):
+        raise RuntimeError("OpenSearch Dashboards did not save the default time range")
+    print(
+        f"[sigils] configured default data view {args.default_index} "
+        f"and time range {args.time_from} to {args.time_to}"
+    )
+
+
 def main():
     args = parse_args()
     try:
         connect_aliases(args)
         for dashboard in args.dashboards:
             import_dashboard(args, dashboard)
+        configure_dashboard_defaults(args)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         sys.exit(f"error: {exc}")
 

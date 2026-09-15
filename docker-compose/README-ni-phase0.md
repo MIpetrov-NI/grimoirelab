@@ -67,6 +67,13 @@ docker compose up -d
 Services: `mariadb`, `valkey`, `opensearch` (9200), `opensearch-dashboards` (5601),
 `sortinghat`, `nginx` (8000), and `mordred` (the orchestrator).
 
+Every service uses Docker's `unless-stopped` restart policy. After a reboot, the
+stack starts again when Docker Desktop starts, unless it was explicitly stopped
+before the reboot. Enable **Start Docker Desktop when you sign in to your
+computer** in Docker Desktop settings so collection resumes without a manual
+`docker compose up -d`. An interrupted backend operation may restart, but
+persisted OpenSearch and SortingHat data is retained.
+
 ### 4. Watch the pipeline
 
 ```bash
@@ -105,10 +112,20 @@ The script:
 4. Downloads the OpenSearch-compatible `overview`, `git`, `github_issues`, and
    `github_pull_requests` NDJSON bundles from Sigils.
 5. Imports the saved objects with overwrite enabled, so rerunning is safe.
+6. Sets `git` as the default data view and `now-5y` to `now` as the default
+   dashboard time range.
+
+The canonical `git` alias applies repository-specific analysis boundaries from
+`aliases-ni.json`. For `ni/linux`, commits before the repository was created in
+the NI organization (`2014-06-20T14:25:04Z`) remain in the physical indices for
+provenance but are excluded from dashboards. Add a reviewed alias-filter clause
+for any other repository with inherited upstream history; do not rely on the
+interactive dashboard time picker to establish portfolio scope.
 
 To pin or test another Sigils revision, pass `--sigils-ref <tag-or-commit>`.
 Credentials can be overridden with `OPENSEARCH_USERNAME` and
-`OPENSEARCH_PASSWORD`.
+`OPENSEARCH_PASSWORD`. Override the dashboard defaults with `--default-index`,
+`--time-from`, and `--time-to`.
 
 ### 7. Verify the dashboard connections
 
@@ -133,8 +150,10 @@ Open http://localhost:5601, go to **Dashboards**, and open:
 - GitHub Pull Requests
 - Overview
 
-Set a broad time range such as **Last 5 years** if the panels initially show no data.
-The imported data views use `grimoire_creation_date` as their time field.
+The importer sets **Last 5 years** as the default. If an already-open browser tab
+retains a shorter range in its URL, select **Last 5 years** once or reopen the
+dashboard from the Dashboards list. The imported data views use
+`grimoire_creation_date` as their time field.
 
 ### 8. Classify NI-affiliated contributors
 
@@ -186,11 +205,20 @@ do not equate `Unknown` with external.
 - **Identity resolution is provisional.** SortingHat merges identities, but org
   affiliation and bus-factor/diversity metrics are only trustworthy after the Phase 2
   identity pass (see `docs/metrics.md`, principle P4 in the companion repo).
+- **SortingHat rejects a large identity request.** The nginx and Django settings
+  permit identity GraphQL requests up to 100 MiB. Recreate nginx and SortingHat,
+  then restart Mordred after changing this limit:
+  `docker compose up -d --no-deps --force-recreate nginx sortinghat`, followed by
+  `docker compose restart mordred`.
 - **Rate limits.** Tier 1 (10 repos) stays well under 5000 req/hr. Scaling to all 219
   repos needs the tiering in `gen_projects.py` (`--tier 1,2` + git-only Tier 3) and
   incremental runs; that is a later phase.
 - **Reset.** `docker compose down -v` drops volumes (OpenSearch + MariaDB data) for a
   clean re-run.
+- **Restart after reboot.** Docker restarts the stack when Docker Desktop starts.
+  If Docker Desktop does not start automatically, open it and run
+  `docker compose up -d`. Use `docker compose stop` before shutting down when you
+  intentionally do not want the stack to restart.
 
 ## Teardown
 
