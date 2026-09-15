@@ -20,6 +20,8 @@ server {
   }
 
   location /identities {
+      client_max_body_size 100m;
+
       rewrite ^/identities/(.*) /$1 break;
 
       include /etc/nginx/uwsgi_params;

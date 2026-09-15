@@ -193,6 +193,11 @@ do not equate `Unknown` with external.
 - **Identity resolution is provisional.** SortingHat merges identities, but org
   affiliation and bus-factor/diversity metrics are only trustworthy after the Phase 2
   identity pass (see `docs/metrics.md`, principle P4 in the companion repo).
+- **SortingHat rejects a large identity request.** The nginx and Django settings
+  permit identity GraphQL requests up to 100 MiB. Recreate nginx and SortingHat,
+  then restart Mordred after changing this limit:
+  `docker compose up -d --no-deps --force-recreate nginx sortinghat`, followed by
+  `docker compose restart mordred`.
 - **Rate limits.** Tier 1 (10 repos) stays well under 5000 req/hr. Scaling to all 219
   repos needs the tiering in `gen_projects.py` (`--tier 1,2` + git-only Tier 3) and
   incremental runs; that is a later phase.
